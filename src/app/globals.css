@@ -1,0 +1,49 @@
+:root {
+  --bg: #f3efe6;
+  --bg-accent: #e7e0d2;
+  --ink: #1c1914;
+  --muted: #5c564c;
+  --line: #cfc6b6;
+  --panel: #fffdf8;
+  --accent: #1f5c4d;
+  --accent-hover: #17483c;
+  --danger: #8b2e2e;
+  --ok: #1f5c4d;
+  --warn: #8a5a12;
+  --shadow: 0 12px 40px rgba(28, 25, 20, 0.08);
+  --font-display: var(--font-literata), "Palatino Linotype", serif;
+  --font-body: var(--font-figtree), "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #fff8e8 0%, transparent 55%),
+    radial-gradient(900px 400px at 100% 0%, #dde8e2 0%, transparent 50%),
+    var(--bg);
+  font-family: var(--font-body);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: #c8e0d6;
+}
