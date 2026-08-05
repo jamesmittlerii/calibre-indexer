@@ -43,7 +43,7 @@ export type Book = {
 
 export type IndexJob = {
   id: number;
-  status: "idle" | "running" | "done" | "error";
+  status: "idle" | "running" | "done" | "error" | "cancelled";
   message: string | null;
   books_indexed: number;
   started_at: string | null;
@@ -169,6 +169,17 @@ export function listServers(): Server[] {
   return getDb().prepare("SELECT * FROM servers ORDER BY id").all() as Server[];
 }
 
+/** Servers that have never completed an index pass. */
+export function listUnindexedServers(): Server[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM servers
+       WHERE last_indexed_at IS NULL
+       ORDER BY id`
+    )
+    .all() as Server[];
+}
+
 export function listServersWithStats(): ServerStats[] {
   return getDb()
     .prepare(
@@ -219,8 +230,8 @@ export function addServer(input: {
 
   const result = getDb()
     .prepare(
-      `INSERT INTO servers (url, name, username, password)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO servers (url, name, username, password, last_status)
+       VALUES (?, ?, ?, ?, 'pending')`
     )
     .run(
       url,
@@ -235,7 +246,26 @@ export function addServer(input: {
 }
 
 export function deleteServer(id: number): void {
+  const server = getServer(id);
   getDb().prepare("DELETE FROM servers WHERE id = ?").run(id);
+
+  // End a single-server index job targeting this URL (not a full multi-server run).
+  if (!server) return;
+  const job = getIndexJob();
+  if (job.status !== "running") return;
+  const label = server.name || server.url;
+  const msg = job.message ?? "";
+  const isSingleServerJob =
+    (msg.includes(server.url) || msg.includes(label)) &&
+    !msg.includes(" live ·") &&
+    !msg.includes(" server(s)");
+  if (isSingleServerJob) {
+    setIndexJob({
+      status: "done",
+      message: `Stopped: ${label} was removed`,
+      finished_at: new Date().toISOString(),
+    });
+  }
 }
 
 export function getServer(id: number): Server | undefined {

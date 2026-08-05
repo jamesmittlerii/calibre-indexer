@@ -2,10 +2,17 @@ import { NextResponse } from "next/server";
 import {
   addServer,
   deleteServer,
+  getIndexJob,
   listServersWithStats,
 } from "@/lib/db";
+import {
+  enqueueServerIndex,
+  scheduleStartupUnindexed,
+} from "@/lib/index-jobs";
 
 export const runtime = "nodejs";
+
+scheduleStartupUnindexed();
 
 export async function GET() {
   return NextResponse.json({ servers: listServersWithStats() });
@@ -28,8 +35,12 @@ export async function POST(request: Request) {
       username: body.username,
       password: body.password,
     });
+    enqueueServerIndex(server.id);
     const { password: _password, ...safe } = server;
-    return NextResponse.json({ server: safe }, { status: 201 });
+    return NextResponse.json(
+      { server: safe, indexing: true, job: getIndexJob() },
+      { status: 201 }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to add server";
     const status = message.includes("UNIQUE") ? 409 : 500;

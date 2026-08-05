@@ -132,6 +132,7 @@ export default function ServersPage() {
       setName("");
       setUsername("");
       setPassword("");
+      if (data.job) setJob(data.job);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add server");
@@ -171,6 +172,24 @@ export default function ServersPage() {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Index failed");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelIndexJob() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/index", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cancel failed");
+      setJob(data.job ?? null);
+      setBookCount(data.bookCount ?? 0);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancel failed");
       await refresh();
     } finally {
       setBusy(false);
@@ -304,23 +323,44 @@ export default function ServersPage() {
             {job?.message ? ` — ${job.message}` : ""}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void startIndex()}
-          disabled={busy || indexing || servers.length === 0}
-          style={{
-            padding: "0.75rem 1.1rem",
-            borderRadius: 10,
-            border: "none",
-            background: "var(--ink)",
-            color: "#fff",
-            fontWeight: 600,
-            cursor: busy || indexing || servers.length === 0 ? "not-allowed" : "pointer",
-            opacity: busy || indexing || servers.length === 0 ? 0.6 : 1,
-          }}
-        >
-          {indexing ? "Indexing…" : "Rebuild all"}
-        </button>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          {indexing ? (
+            <button
+              type="button"
+              onClick={() => void cancelIndexJob()}
+              disabled={busy}
+              style={{
+                padding: "0.75rem 1.1rem",
+                borderRadius: 10,
+                border: "1px solid var(--danger)",
+                background: "transparent",
+                color: "var(--danger)",
+                fontWeight: 600,
+                cursor: busy ? "wait" : "pointer",
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              Cancel
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void startIndex()}
+            disabled={busy || indexing || servers.length === 0}
+            style={{
+              padding: "0.75rem 1.1rem",
+              borderRadius: 10,
+              border: "none",
+              background: "var(--ink)",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: busy || indexing || servers.length === 0 ? "not-allowed" : "pointer",
+              opacity: busy || indexing || servers.length === 0 ? 0.6 : 1,
+            }}
+          >
+            {indexing ? "Indexing…" : "Rebuild all"}
+          </button>
+        </div>
       </section>
 
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "0.75rem" }}>

@@ -1,34 +1,47 @@
 import { NextResponse } from "next/server";
 import { getBookCount, getIndexJob, getServer, listServers } from "@/lib/db";
-import { runFullIndex, runServerIndex } from "@/lib/indexer";
+import {
+  getActiveIndexState,
+  reclaimOrphanedJob,
+  requestCancelIndex,
+  scheduleStartupUnindexed,
+  startFullIndex,
+  startServerIndex,
+} from "@/lib/index-jobs";
 
 export const runtime = "nodejs";
 
-let activeIndex: Promise<unknown> | null = null;
-
-function jobBusy() {
-  return getIndexJob().status === "running" || activeIndex !== null;
-}
+scheduleStartupUnindexed();
 
 export async function GET() {
+  reclaimOrphanedJob();
   return NextResponse.json({
     job: getIndexJob(),
     bookCount: getBookCount(),
+    ...getActiveIndexState(),
   });
 }
 
-export async function POST(request: Request) {
-  if (jobBusy()) {
+export async function DELETE() {
+  const cancelled = requestCancelIndex();
+  if (!cancelled) {
     return NextResponse.json(
       {
-        error: "An index job is already running",
+        error: "No index job is running",
         job: getIndexJob(),
         bookCount: getBookCount(),
       },
       { status: 409 }
     );
   }
+  return NextResponse.json({
+    cancelled: true,
+    job: getIndexJob(),
+    bookCount: getBookCount(),
+  });
+}
 
+export async function POST(request: Request) {
   let serverId: number | undefined;
   try {
     const body = (await request.json().catch(() => ({}))) as {
@@ -42,14 +55,13 @@ export async function POST(request: Request) {
   }
 
   if (serverId != null) {
-    if (!Number.isFinite(serverId) || serverId <= 0 || !getServer(serverId)) {
-      return NextResponse.json({ error: "Server not found" }, { status: 404 });
+    const result = startServerIndex(serverId);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, job: getIndexJob(), bookCount: getBookCount() },
+        { status: result.status ?? 409 }
+      );
     }
-    activeIndex = runServerIndex(serverId)
-      .catch(() => undefined)
-      .finally(() => {
-        activeIndex = null;
-      });
   } else {
     if (listServers().length === 0) {
       return NextResponse.json(
@@ -61,11 +73,14 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    activeIndex = runFullIndex()
-      .catch(() => undefined)
-      .finally(() => {
-        activeIndex = null;
-      });
+    // Rebuild-all still rejects when busy (don't silently queue a full rebuild).
+    const result = startFullIndex();
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, job: getIndexJob(), bookCount: getBookCount() },
+        { status: 409 }
+      );
+    }
   }
 
   await new Promise((r) => setTimeout(r, 25));
@@ -74,5 +89,6 @@ export async function POST(request: Request) {
     started: true,
     job: getIndexJob(),
     bookCount: getBookCount(),
+    server: serverId != null ? getServer(serverId) : undefined,
   });
 }

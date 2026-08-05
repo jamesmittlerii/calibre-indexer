@@ -48,11 +48,13 @@ async function calibreFetch(
   }
 
   const { timeoutMs = 20_000, signal, ...rest } = init ?? {};
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const combined = signal ? AbortSignal.any([timeout, signal]) : timeout;
 
   const res = await fetch(url, {
     ...rest,
     headers,
-    signal: signal ?? AbortSignal.timeout(timeoutMs),
+    signal: combined,
   });
 
   if (!res.ok) {
@@ -63,8 +65,11 @@ async function calibreFetch(
   return res;
 }
 
-export async function fetchLibraryInfo(server: Server): Promise<LibraryInfo> {
-  const res = await calibreFetch(server, "/ajax/library-info");
+export async function fetchLibraryInfo(
+  server: Server,
+  signal?: AbortSignal
+): Promise<LibraryInfo> {
+  const res = await calibreFetch(server, "/ajax/library-info", { signal });
   return (await res.json()) as LibraryInfo;
 }
 
@@ -72,7 +77,8 @@ export async function fetchBookIdsPage(
   server: Server,
   libraryId: string,
   offset: number,
-  num = 200
+  num = 200,
+  signal?: AbortSignal
 ): Promise<{ book_ids: number[]; total_num: number }> {
   const qs = new URLSearchParams({
     query: "",
@@ -83,7 +89,8 @@ export async function fetchBookIdsPage(
   });
   const res = await calibreFetch(
     server,
-    `/ajax/search/${encodeURIComponent(libraryId)}?${qs}`
+    `/ajax/search/${encodeURIComponent(libraryId)}?${qs}`,
+    { signal }
   );
   return (await res.json()) as { book_ids: number[]; total_num: number };
 }
@@ -91,7 +98,8 @@ export async function fetchBookIdsPage(
 export async function fetchBooksMeta(
   server: Server,
   libraryId: string,
-  ids: number[]
+  ids: number[],
+  signal?: AbortSignal
 ): Promise<Record<string, CalibreBookMeta | null>> {
   if (ids.length === 0) return {};
   const qs = new URLSearchParams({
@@ -100,7 +108,8 @@ export async function fetchBooksMeta(
   });
   const res = await calibreFetch(
     server,
-    `/ajax/books/${encodeURIComponent(libraryId)}?${qs}`
+    `/ajax/books/${encodeURIComponent(libraryId)}?${qs}`,
+    { signal }
   );
   return (await res.json()) as Record<string, CalibreBookMeta | null>;
 }
