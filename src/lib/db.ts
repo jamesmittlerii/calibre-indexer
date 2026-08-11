@@ -327,14 +327,38 @@ export function upsertBook(book: {
     .run(book);
 }
 
+/** Escape a literal for use inside an FTS5 double-quoted string. */
+function quoteFtsLiteral(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Build an FTS5 MATCH query.
+ * - "quoted phrases" → exact phrase on title/authors/series/tags
+ * - multi-word unquoted → same (phrase, not AND-of-prefixes across description)
+ * - single token → prefix match across all indexed fields
+ */
 function escapeFtsQuery(query: string): string {
-  const tokens = query
-    .trim()
-    .replace(/["']/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((t) => `"${t}"*`);
-  return tokens.join(" ");
+  const trimmed = query.trim();
+  if (!trimmed) return "";
+
+  const quoted = trimmed.match(/^["'](.*)["']$/s);
+  if (quoted) {
+    const phrase = quoted[1].trim();
+    if (!phrase) return "";
+    return `{title authors series tags} : ${quoteFtsLiteral(phrase)}`;
+  }
+
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return "";
+
+  if (tokens.length === 1) {
+    return `${quoteFtsLiteral(tokens[0])}*`;
+  }
+
+  // Multi-word: require the words as a phrase in bibliographic fields only.
+  // (Description blurbs often name sequels and drown out title search.)
+  return `{title authors series tags} : ${quoteFtsLiteral(tokens.join(" "))}`;
 }
 
 export function searchBooks(query: string, limit = 50): Book[] {
